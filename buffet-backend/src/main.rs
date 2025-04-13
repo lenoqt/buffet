@@ -1,11 +1,6 @@
-mod config;
-mod db;
-mod error;
-mod handlers;
-mod models;
-mod routes;
-mod state;
-
+use buffet_backend::{
+    config, db, routes
+};
 use tracing::{info, error};
 
 #[tokio::main]

@@ -9,6 +9,7 @@ use crate::state::AppState;
 
 mod user;
 mod item;
+mod health;
 
 pub fn create_router(pool: Pool<Sqlite>) -> Router {
     // Create application state
@@ -21,10 +22,21 @@ pub fn create_router(pool: Pool<Sqlite>) -> Router {
         .allow_headers(Any);
 
     // Create router with all routes
+    create_router_with_state(state)
+        .layer(cors)
+        .layer(TraceLayer::new_for_http())
+}
+
+// Used by the test harness to create a router with a specific state
+pub fn create_test_router(state: AppState) -> Router {
+    create_router_with_state(state)
+}
+
+// Common router creation logic
+fn create_router_with_state(state: AppState) -> Router {
     Router::new()
         .merge(user::create_routes())
         .merge(item::create_routes())
-        .layer(cors)
-        .layer(TraceLayer::new_for_http())
+        .merge(health::create_routes())
         .with_state(state)
 }
