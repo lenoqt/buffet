@@ -1,0 +1,42 @@
+[package]
+name = "buffet-backend"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Web framework
+axum = "0.8.3"
+# Tower for middleware
+tower = "0.5.2"
+tower-http = { version = "0.6.2", features = ["trace", "cors"] }
+
+# Database
+sqlx = { version = "0.8.3", features = ["runtime-tokio-rustls", "sqlite", "macros", "time"] }
+
+# Async runtime
+tokio = { version = "1.44.2", features = ["full"] }
+futures = "0.3.31"
+
+# Error handling
+anyhow = "1.0.79"
+thiserror = "2.0.12"
+
+# Serialization/Deserialization
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+
+# Logging
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+
+# Dotenv for configuration
+dotenvy = "0.15.7"
+
+# UUID generation
+uuid = { version = "1.16.0", features = ["v4", "serde"] }
+
+# Time handling
+time = { version = "0.3.41", features = ["serde"] }
+
+# Utilities
+async-trait = "0.1.88"
