@@ -1,11 +1,12 @@
 use crate::actors::messages::{ActorError, ActorResult, TimeSeriesRef};
 use crate::models::market_data::OHLCV;
 use crate::tsdb::TimescaleDb;
-use kameo::actor::{Actor, ActorRef};
+use kameo::Actor;
 use kameo::message::{Context, Message};
 use sqlx::{Pool, Postgres};
-use std::convert::Infallible;
 
+#[derive(Actor)]
+#[actor(name = "TimeSeriesStorageActor")]
 pub struct TimeSeriesStorageActor {
     tsdb: TimescaleDb,
 }
@@ -15,19 +16,6 @@ impl TimeSeriesStorageActor {
         Self {
             tsdb: TimescaleDb::new(pool),
         }
-    }
-}
-
-impl Actor for TimeSeriesStorageActor {
-    type Args = Self;
-    type Error = Infallible;
-
-    async fn on_start(state: Self::Args, _actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
-        Ok(state)
-    }
-
-    fn name() -> &'static str {
-        "TimeSeriesStorageActor"
     }
 }
 

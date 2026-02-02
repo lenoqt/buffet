@@ -1,11 +1,13 @@
 use crate::actors::messages::{ActorError, ActorResult};
 use crate::actors::storage::StoreOHLCV;
 use crate::models::market_data::OHLCV;
-use kameo::actor::{Actor, ActorRef};
+use kameo::Actor;
+use kameo::actor::ActorRef;
 use kameo::message::{Context, Message};
-use std::convert::Infallible;
 use tracing::info;
 
+#[derive(Actor)]
+#[actor(name = "DataCollectorActor")]
 pub struct DataCollectorActor {
     storage_ref: ActorRef<crate::actors::storage::TimeSeriesStorageActor>,
 }
@@ -13,19 +15,6 @@ pub struct DataCollectorActor {
 impl DataCollectorActor {
     pub fn new(storage_ref: ActorRef<crate::actors::storage::TimeSeriesStorageActor>) -> Self {
         Self { storage_ref }
-    }
-}
-
-impl Actor for DataCollectorActor {
-    type Args = Self;
-    type Error = Infallible;
-
-    async fn on_start(state: Self::Args, _actor_ref: ActorRef<Self>) -> Result<Self, Self::Error> {
-        Ok(state)
-    }
-
-    fn name() -> &'static str {
-        "DataCollectorActor"
     }
 }
 
