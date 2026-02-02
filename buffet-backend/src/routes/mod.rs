@@ -1,5 +1,5 @@
 use axum::{Router, http::Method};
-use sqlx::{Pool, Sqlite};
+use sqlx::{Pool, Postgres, Sqlite};
 use tower_http::{
     cors::{Any, CorsLayer},
     trace::TraceLayer,
@@ -7,13 +7,12 @@ use tower_http::{
 
 use crate::state::AppState;
 
-mod user;
-mod item;
 mod health;
+mod strategy;
 
-pub fn create_router(pool: Pool<Sqlite>) -> Router {
+pub fn create_router(db_pool: Pool<Sqlite>, tsdb_pool: Pool<Postgres>) -> Router {
     // Create application state
-    let state = AppState::new(pool);
+    let state = AppState::new(db_pool, tsdb_pool);
 
     // Configure CORS
     let cors = CorsLayer::new()
@@ -35,8 +34,7 @@ pub fn create_test_router(state: AppState) -> Router {
 // Common router creation logic
 fn create_router_with_state(state: AppState) -> Router {
     Router::new()
-        .merge(user::create_routes())
-        .merge(item::create_routes())
+        .merge(strategy::create_routes())
         .merge(health::create_routes())
         .with_state(state)
 }

@@ -1,38 +1,82 @@
-use axum::Router;
 use buffet_backend::{
     routes,
     state::AppState,
+    telemetry::{get_subscriber, init_subscriber},
 };
 use once_cell::sync::Lazy;
-use sqlx::{Connection, Executor, Pool, Sqlite, SqliteConnection, SqlitePool};
+use sqlx::{PgPool, SqlitePool};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use uuid::Uuid;
 
-// Ensure tests run sequentially
+// Ensure tests run sequentially if they share resources
 static TEST_MUTEX: Lazy<Arc<Mutex<()>>> = Lazy::new(|| Arc::new(Mutex::new(())));
+
+// Initialize telemetry once for all tests
+static TRACING: Lazy<()> = Lazy::new(|| {
+    let filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into());
+    let subscriber_name = "test".into();
+    if std::env::var("TEST_LOG").is_ok() {
+        let subscriber = get_subscriber(subscriber_name, filter, std::io::stdout);
+        init_subscriber(subscriber);
+    } else {
+        let subscriber = get_subscriber(subscriber_name, filter, std::io::sink);
+        init_subscriber(subscriber);
+    };
+});
 
 pub struct TestApp {
     pub address: String,
-    pub db_pool: Pool<Sqlite>,
     pub api_client: reqwest::Client,
 }
 
-// Create a test application with an isolated database
+// Create a test application with isolated databases
 pub async fn spawn_app() -> TestApp {
-    // Acquire mutex to run tests sequentially
+    // Initialize tracing
+    Lazy::force(&TRACING);
+
+    // Acquire mutex to run tests sequentially if needed
     let _lock = TEST_MUTEX.lock().await;
 
-    // Configure test database
-    // let db_name = Uuid::new_v4().to_string();
-    let db_url = format!("sqlite::memory:");
+    // Configure test databases
+    let db_url = "sqlite::memory:".to_string();
 
-    // Initialize database
-    let pool = setup_test_database(&db_url).await;
+    // In a real scenario, we might want a test-specific Postgres DB
+    // For now, we use the one from env or a default test one
+    let tsdb_url = std::env::var("TSDB_TEST_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/buffet_test".to_string());
+
+    // Initialize SQLite database
+    let db_pool = setup_test_sqlite(&db_url).await;
+
+    // Initialize TSDB (Postgres)
+    // First connect to default postgres to create our test db if needed
+    let admin_url = tsdb_url.replace("/buffet_test", "/postgres");
+    let admin_pool = PgPool::connect(&admin_url)
+        .await
+        .expect("Failed to connect to Postgres admin");
+
+    // Create database if not exists
+    let exists: (bool,) =
+        sqlx::query_as("SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'buffet_test')")
+            .fetch_one(&admin_pool)
+            .await
+            .unwrap_or((false,));
+
+    if !exists.0 {
+        sqlx::query("CREATE DATABASE buffet_test")
+            .execute(&admin_pool)
+            .await
+            .expect("Failed to create buffet_test database");
+    }
+    admin_pool.close().await;
+
+    let tsdb_pool = PgPool::connect(&tsdb_url)
+        .await
+        .expect("Failed to connect to test TSDB");
 
     // Create app and state
-    let app_state = AppState::new(pool.clone());
-    let app = routes::create_test_router(app_state);
+    let _app_state = AppState::new(db_pool.clone(), tsdb_pool.clone());
+    let app = routes::create_router(db_pool.clone(), tsdb_pool.clone());
 
     // Start the server
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -56,70 +100,23 @@ pub async fn spawn_app() -> TestApp {
 
     TestApp {
         address: server_address,
-        db_pool: pool,
         api_client: client,
     }
 }
 
-// Set up an isolated test database with migrations
-async fn setup_test_database(db_url: &str) -> Pool<Sqlite> {
-    // Create connection
-    let mut conn = SqliteConnection::connect(db_url)
+// Set up an isolated test SQLite database with migrations
+async fn setup_test_sqlite(db_url: &str) -> SqlitePool {
+    let pool = SqlitePool::connect(db_url)
         .await
-        .expect("Failed to connect to test database");
+        .expect("Failed to create test database pool");
 
-    // Run migrations on the connection
-    for migration in std::fs::read_dir("./migrations").unwrap() {
-        let migration = migration.unwrap();
-        let path = migration.path();
-        if path.is_file() && path.extension().unwrap_or_default() == "sql" {
-            let sql = std::fs::read_to_string(path)
-                .expect("Failed to read migration file");
-            conn.execute(sql.as_str())
-                .await
-                .expect("Failed to execute migration");
-        }
-    }
-
-    // Create a pool
-    SqlitePool::connect(db_url)
+    // Run migrations using sqlx
+    sqlx::migrate!("./migrations")
+        .run(&pool)
         .await
-        .expect("Failed to create test database pool")
+        .expect("Failed to run migrations");
+
+    pool
 }
 
-// Testing utilities
-impl TestApp {
-    // Helper to create a test user
-    pub async fn create_test_user(&self, username: &str, email: &str) -> String {
-        let response = self.api_client
-            .post(&format!("{}/api/users", &self.address))
-            .json(&serde_json::json!({
-                "username": username,
-                "email": email,
-                "password": "password123"
-            }))
-            .send()
-            .await
-            .expect("Failed to create test user");
-
-        let user: serde_json::Value = response.json().await.unwrap();
-        user["id"].as_str().unwrap().to_string()
-    }
-
-    // Helper to create a test item
-    pub async fn create_test_item(&self, name: &str, user_id: &str) -> String {
-        let response = self.api_client
-            .post(&format!("{}/api/items", &self.address))
-            .json(&serde_json::json!({
-                "name": name,
-                "description": "Test description",
-                "user_id": user_id
-            }))
-            .send()
-            .await
-            .expect("Failed to create test item");
-
-        let item: serde_json::Value = response.json().await.unwrap();
-        item["id"].as_str().unwrap().to_string()
-    }
-}
+impl TestApp {}

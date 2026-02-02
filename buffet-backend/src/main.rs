@@ -1,26 +1,41 @@
 use buffet_backend::{
-    config, db, routes
+    config, db, routes,
+    telemetry::{get_subscriber, init_subscriber},
 };
-use tracing::{info, error};
+use kameo::actor::Spawn;
+use kameo::mailbox;
+use tracing::{error, info};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Initialize logger
-    tracing_subscriber::fmt::init();
+    // Initialize telemetry
+    let subscriber = get_subscriber("buffet_backend".into(), "info".into(), std::io::stdout);
+    init_subscriber(subscriber);
 
     // Load configuration
-    let config = config::Config::from_env()
-        .map_err(|e| {
-            error!("Configuration error: {}", e);
-            e
-        })?;
+    let config = config::Config::from_env().map_err(|e| {
+        error!("Configuration error: {}", e);
+        e
+    })?;
     let addr = config.server_addr;
 
-    // Set up database connection
-    let pool = db::setup_database(&config.database_url).await?;
+    // Set up database connections
+    let db_pool = db::setup_database(&config.database_url).await?;
+    let tsdb_pool = db::setup_tsdb(&config.tsdb_url).await?;
 
-    // Build our application with the database pool as state
-    let app = routes::create_router(pool);
+    // Build our application with the database pools as state
+    let app = routes::create_router(db_pool.clone(), tsdb_pool.clone());
+
+    // Initialize actor system
+    info!("Initializing actor system");
+    let storage_actor = buffet_backend::actors::TimeSeriesStorageActor::spawn_with_mailbox(
+        buffet_backend::actors::TimeSeriesStorageActor::new(tsdb_pool),
+        mailbox::bounded(config.actor.mailbox_size),
+    );
+    let _collector_actor = buffet_backend::actors::DataCollectorActor::spawn_with_mailbox(
+        buffet_backend::actors::DataCollectorActor::new(storage_actor),
+        mailbox::bounded(config.actor.mailbox_size),
+    );
 
     // Start server
     info!("Starting server at {}", addr);
