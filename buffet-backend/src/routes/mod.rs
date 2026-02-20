@@ -1,19 +1,19 @@
-use axum::{Router, http::Method};
+use axum::Router;
+use axum::http::{Method, header};
 use sqlx::{Pool, Postgres, Sqlite};
-use tower_http::{
-    cors::{Any, CorsLayer},
-    trace::TraceLayer,
+use tower_http::cors::{Any, CorsLayer};
+
+use crate::actors::{
+    BacktestActor, DataCollectorActor, OrderExecutionActor, StrategyExecutorActor,
 };
-
 use crate::state::AppState;
+use kameo::actor::ActorRef;
 
+mod backtest;
 mod health;
 mod order;
 mod position;
 mod strategy;
-
-use crate::actors::{DataCollectorActor, OrderExecutionActor, StrategyExecutorActor};
-use kameo::actor::ActorRef;
 
 pub fn create_router(
     db_pool: Pool<Sqlite>,
@@ -21,6 +21,7 @@ pub fn create_router(
     collector_actor: ActorRef<DataCollectorActor>,
     executor_actor: ActorRef<StrategyExecutorActor>,
     execution_actor: ActorRef<OrderExecutionActor>,
+    backtest_actor: ActorRef<BacktestActor>,
 ) -> Router {
     // Create application state
     let state = AppState::new(
@@ -29,31 +30,30 @@ pub fn create_router(
         collector_actor,
         executor_actor,
         execution_actor,
+        backtest_actor,
     );
 
     // Configure CORS
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
         .allow_origin(Any)
-        .allow_headers(Any);
+        .allow_headers([header::CONTENT_TYPE]);
 
-    // Create router with all routes
-    create_router_with_state(state)
-        .layer(cors)
-        .layer(TraceLayer::new_for_http())
+    // Build our application with the state
+    create_router_with_state(state).layer(cors)
 }
 
-// Used by the test harness to create a router with a specific state
-pub fn create_test_router(state: AppState) -> Router {
-    create_router_with_state(state)
-}
-
-// Common router creation logic
 fn create_router_with_state(state: AppState) -> Router {
     Router::new()
         .merge(strategy::create_routes())
         .merge(order::create_routes())
         .merge(position::create_routes())
+        .merge(backtest::create_routes())
         .merge(health::create_routes())
         .with_state(state)
+}
+
+#[cfg(test)]
+pub fn create_test_router(state: AppState) -> Router {
+    create_router_with_state(state)
 }

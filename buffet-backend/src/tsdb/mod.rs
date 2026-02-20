@@ -1,6 +1,7 @@
 use crate::error::{AppError, Result};
 use crate::models::market_data::OHLCV;
 use sqlx::{Pool, Postgres, types::chrono};
+use tracing::{info, warn};
 
 pub struct TimescaleDb {
     pool: Pool<Postgres>,
@@ -13,11 +14,17 @@ impl TimescaleDb {
 
     /// Initialize TimescaleDB (create extension and hypertables if they don't exist)
     pub async fn setup(&self) -> Result<()> {
-        // Create extension
-        sqlx::query("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE")
+        // Attempt to create extension (swallow error if it fails - might not have extension files)
+        match sqlx::query("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE")
             .execute(&self.pool)
             .await
-            .map_err(AppError::Database)?;
+        {
+            Ok(_) => info!("TimescaleDB extension ensured"),
+            Err(e) => warn!(
+                "Could not create timescaledb extension (falling back to regular tables): {}",
+                e
+            ),
+        }
 
         // Create OHLCV table
         sqlx::query(
@@ -38,19 +45,24 @@ impl TimescaleDb {
         .await
         .map_err(AppError::Database)?;
 
-        // Convert to hypertable (error if already a hypertable, so we check first)
-        let is_hypertable: (bool,) = sqlx::query_as(
+        // Try to convert to hypertable
+        let is_hypertable: (bool,) = match sqlx::query_as(
             "SELECT count(*) > 0 FROM timescaledb_information.hypertables WHERE hypertable_name = 'ohlcv'"
         )
         .fetch_one(&self.pool)
-        .await
-        .map_err(AppError::Database)?;
+        .await {
+            Ok(val) => val,
+            Err(_) => (false,), // Probably not a TimescaleDB instance
+        };
 
         if !is_hypertable.0 {
-            sqlx::query("SELECT create_hypertable('ohlcv', 'time')")
+            match sqlx::query("SELECT create_hypertable('ohlcv', 'time', if_not_exists => TRUE)")
                 .execute(&self.pool)
                 .await
-                .map_err(AppError::Database)?;
+            {
+                Ok(_) => info!("Hypertable 'ohlcv' ensured"),
+                Err(e) => warn!("Could not create hypertable (using regular table): {}", e),
+            }
         }
 
         Ok(())

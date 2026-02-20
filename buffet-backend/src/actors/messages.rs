@@ -115,3 +115,9 @@ pub struct MarketDataUpdate {
     pub symbol: String,
     pub data: crate::models::market_data::OHLCV,
 }
+
+/// Request to run a backtest
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunBacktest {
+    pub backtest_id: String,
+}

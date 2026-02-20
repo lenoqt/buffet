@@ -9,6 +9,7 @@ pub mod routes;
 pub mod state;
 pub mod telemetry;
 pub mod tsdb;
+pub mod utils;
 
 // Re-export items needed for the binary
 pub use error::{AppError, Result};

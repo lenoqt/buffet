@@ -1,7 +1,9 @@
 use kameo::actor::ActorRef;
 use sqlx::{Pool, Postgres, Sqlite};
 
-use crate::actors::{DataCollectorActor, OrderExecutionActor, StrategyExecutorActor};
+use crate::actors::{
+    BacktestActor, DataCollectorActor, OrderExecutionActor, StrategyExecutorActor,
+};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -10,6 +12,7 @@ pub struct AppState {
     pub collector: ActorRef<DataCollectorActor>,
     pub executor: ActorRef<StrategyExecutorActor>,
     pub execution: ActorRef<OrderExecutionActor>,
+    pub backtest: ActorRef<BacktestActor>,
 }
 
 impl AppState {
@@ -19,6 +22,7 @@ impl AppState {
         collector: ActorRef<DataCollectorActor>,
         executor: ActorRef<StrategyExecutorActor>,
         execution: ActorRef<OrderExecutionActor>,
+        backtest: ActorRef<BacktestActor>,
     ) -> Self {
         Self {
             db,
@@ -26,6 +30,7 @@ impl AppState {
             collector,
             executor,
             execution,
+            backtest,
         }
     }
 }

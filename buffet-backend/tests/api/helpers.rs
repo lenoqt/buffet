@@ -69,6 +69,10 @@ pub async fn spawn_app() -> TestApp {
         .await
         .expect("Failed to connect to test TSDB");
 
+    // Initialize TimescaleDB hypertables
+    let tsdb = buffet_backend::tsdb::TimescaleDb::new(tsdb_pool.clone());
+    tsdb.setup().await.expect("Failed to setup TimescaleDB");
+
     // Initialize actor system for tests
     use kameo::actor::Spawn;
     use kameo::mailbox;
@@ -89,7 +93,14 @@ pub async fn spawn_app() -> TestApp {
         mailbox::bounded(100),
     );
     let collector_actor = buffet_backend::actors::DataCollectorActor::spawn_with_mailbox(
-        buffet_backend::actors::DataCollectorActor::new(storage_actor, strategy_actor.clone()),
+        buffet_backend::actors::DataCollectorActor::new(
+            storage_actor.clone(),
+            strategy_actor.clone(),
+        ),
+        mailbox::bounded(100),
+    );
+    let backtest_actor = buffet_backend::actors::BacktestActor::spawn_with_mailbox(
+        buffet_backend::actors::BacktestActor::new(db_pool.clone(), storage_actor.clone()),
         mailbox::bounded(100),
     );
 
@@ -100,6 +111,7 @@ pub async fn spawn_app() -> TestApp {
         collector_actor.clone(),
         strategy_actor.clone(),
         execution_actor.clone(),
+        backtest_actor.clone(),
     );
     let app = routes::create_router(
         db_pool.clone(),
@@ -107,6 +119,7 @@ pub async fn spawn_app() -> TestApp {
         collector_actor.clone(),
         strategy_actor.clone(),
         execution_actor.clone(),
+        backtest_actor.clone(),
     );
 
     // Start the server

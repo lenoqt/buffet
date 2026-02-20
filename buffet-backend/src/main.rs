@@ -41,7 +41,14 @@ async fn main() -> anyhow::Result<()> {
         mailbox::bounded(config.actor.mailbox_size),
     );
     let collector_actor = buffet_backend::actors::DataCollectorActor::spawn_with_mailbox(
-        buffet_backend::actors::DataCollectorActor::new(storage_actor, strategy_actor.clone()),
+        buffet_backend::actors::DataCollectorActor::new(
+            storage_actor.clone(),
+            strategy_actor.clone(),
+        ),
+        mailbox::bounded(config.actor.mailbox_size),
+    );
+    let backtest_actor = buffet_backend::actors::BacktestActor::spawn_with_mailbox(
+        buffet_backend::actors::BacktestActor::new(db_pool.clone(), storage_actor.clone()),
         mailbox::bounded(config.actor.mailbox_size),
     );
 
@@ -52,6 +59,7 @@ async fn main() -> anyhow::Result<()> {
         collector_actor.clone(),
         strategy_actor.clone(),
         execution_actor.clone(),
+        backtest_actor.clone(),
     );
 
     // Start server
