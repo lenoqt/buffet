@@ -1,4 +1,4 @@
-use crate::actors::messages::{ActorError, ActorResult};
+use crate::actors::messages::{ActorError, ActorResult, MarketDataUpdate};
 use crate::actors::storage::StoreOHLCV;
 use crate::models::market_data::OHLCV;
 use kameo::Actor;
@@ -10,11 +10,18 @@ use tracing::info;
 #[actor(name = "DataCollectorActor")]
 pub struct DataCollectorActor {
     storage_ref: ActorRef<crate::actors::storage::TimeSeriesStorageActor>,
+    strategy_ref: ActorRef<crate::actors::strategy::StrategyExecutorActor>,
 }
 
 impl DataCollectorActor {
-    pub fn new(storage_ref: ActorRef<crate::actors::storage::TimeSeriesStorageActor>) -> Self {
-        Self { storage_ref }
+    pub fn new(
+        storage_ref: ActorRef<crate::actors::storage::TimeSeriesStorageActor>,
+        strategy_ref: ActorRef<crate::actors::strategy::StrategyExecutorActor>,
+    ) -> Self {
+        Self {
+            storage_ref,
+            strategy_ref,
+        }
     }
 }
 
@@ -43,13 +50,32 @@ impl Message<CollectData> for DataCollectorActor {
             volume: 1000.0,
         }];
 
+        // Store data
         self.storage_ref
             .ask(StoreOHLCV {
                 symbol: msg.symbol.clone(),
                 asset_type: "crypto".to_string(), // Default for mock
-                data: mock_data,
+                data: mock_data.clone(),
             })
             .await
-            .map_err(|e| ActorError::Internal(e.to_string()))
+            .map_err(|e| ActorError::Internal(e.to_string()))?;
+
+        // Send to strategy executor
+        for point in mock_data {
+            let signals = self
+                .strategy_ref
+                .ask(MarketDataUpdate {
+                    symbol: msg.symbol.clone(),
+                    data: point,
+                })
+                .await
+                .map_err(|e| ActorError::Internal(e.to_string()))?;
+
+            if !signals.is_empty() {
+                info!("Generated {} signals for {}", signals.len(), msg.symbol);
+            }
+        }
+
+        Ok(())
     }
 }

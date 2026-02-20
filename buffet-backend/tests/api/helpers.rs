@@ -24,11 +24,6 @@ static TRACING: Lazy<()> = Lazy::new(|| {
     };
 });
 
-pub struct TestApp {
-    pub address: String,
-    pub api_client: reqwest::Client,
-}
-
 // Create a test application with isolated databases
 pub async fn spawn_app() -> TestApp {
     // Initialize tracing
@@ -74,9 +69,45 @@ pub async fn spawn_app() -> TestApp {
         .await
         .expect("Failed to connect to test TSDB");
 
+    // Initialize actor system for tests
+    use kameo::actor::Spawn;
+    use kameo::mailbox;
+
+    let storage_actor = buffet_backend::actors::TimeSeriesStorageActor::spawn_with_mailbox(
+        buffet_backend::actors::TimeSeriesStorageActor::new(tsdb_pool.clone()),
+        mailbox::bounded(100),
+    );
+    let execution_actor = buffet_backend::actors::OrderExecutionActor::spawn_with_mailbox(
+        buffet_backend::actors::OrderExecutionActor::new(db_pool.clone()),
+        mailbox::bounded(100),
+    );
+    let strategy_actor = buffet_backend::actors::StrategyExecutorActor::spawn_with_mailbox(
+        buffet_backend::actors::StrategyExecutorActor::new(
+            db_pool.clone(),
+            execution_actor.clone(),
+        ),
+        mailbox::bounded(100),
+    );
+    let collector_actor = buffet_backend::actors::DataCollectorActor::spawn_with_mailbox(
+        buffet_backend::actors::DataCollectorActor::new(storage_actor, strategy_actor.clone()),
+        mailbox::bounded(100),
+    );
+
     // Create app and state
-    let _app_state = AppState::new(db_pool.clone(), tsdb_pool.clone());
-    let app = routes::create_router(db_pool.clone(), tsdb_pool.clone());
+    let _app_state = AppState::new(
+        db_pool.clone(),
+        tsdb_pool.clone(),
+        collector_actor.clone(),
+        strategy_actor.clone(),
+        execution_actor.clone(),
+    );
+    let app = routes::create_router(
+        db_pool.clone(),
+        tsdb_pool.clone(),
+        collector_actor.clone(),
+        strategy_actor.clone(),
+        execution_actor.clone(),
+    );
 
     // Start the server
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -101,7 +132,16 @@ pub async fn spawn_app() -> TestApp {
     TestApp {
         address: server_address,
         api_client: client,
+        db_pool,
+        tsdb_pool,
     }
+}
+
+pub struct TestApp {
+    pub address: String,
+    pub api_client: reqwest::Client,
+    pub db_pool: SqlitePool,
+    pub tsdb_pool: PgPool,
 }
 
 // Set up an isolated test SQLite database with migrations

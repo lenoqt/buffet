@@ -23,18 +23,35 @@ async fn main() -> anyhow::Result<()> {
     let db_pool = db::setup_database(&config.database_url).await?;
     let tsdb_pool = db::setup_tsdb(&config.tsdb_url).await?;
 
-    // Build our application with the database pools as state
-    let app = routes::create_router(db_pool.clone(), tsdb_pool.clone());
-
     // Initialize actor system
     info!("Initializing actor system");
     let storage_actor = buffet_backend::actors::TimeSeriesStorageActor::spawn_with_mailbox(
-        buffet_backend::actors::TimeSeriesStorageActor::new(tsdb_pool),
+        buffet_backend::actors::TimeSeriesStorageActor::new(tsdb_pool.clone()),
         mailbox::bounded(config.actor.mailbox_size),
     );
-    let _collector_actor = buffet_backend::actors::DataCollectorActor::spawn_with_mailbox(
-        buffet_backend::actors::DataCollectorActor::new(storage_actor),
+    let execution_actor = buffet_backend::actors::OrderExecutionActor::spawn_with_mailbox(
+        buffet_backend::actors::OrderExecutionActor::new(db_pool.clone()),
         mailbox::bounded(config.actor.mailbox_size),
+    );
+    let strategy_actor = buffet_backend::actors::StrategyExecutorActor::spawn_with_mailbox(
+        buffet_backend::actors::StrategyExecutorActor::new(
+            db_pool.clone(),
+            execution_actor.clone(),
+        ),
+        mailbox::bounded(config.actor.mailbox_size),
+    );
+    let collector_actor = buffet_backend::actors::DataCollectorActor::spawn_with_mailbox(
+        buffet_backend::actors::DataCollectorActor::new(storage_actor, strategy_actor.clone()),
+        mailbox::bounded(config.actor.mailbox_size),
+    );
+
+    // Build our application with the database pools as state
+    let app = routes::create_router(
+        db_pool.clone(),
+        tsdb_pool.clone(),
+        collector_actor.clone(),
+        strategy_actor.clone(),
+        execution_actor.clone(),
     );
 
     // Start server

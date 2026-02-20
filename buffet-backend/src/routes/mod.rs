@@ -10,9 +10,24 @@ use crate::state::AppState;
 mod health;
 mod strategy;
 
-pub fn create_router(db_pool: Pool<Sqlite>, tsdb_pool: Pool<Postgres>) -> Router {
+use crate::actors::{DataCollectorActor, OrderExecutionActor, StrategyExecutorActor};
+use kameo::actor::ActorRef;
+
+pub fn create_router(
+    db_pool: Pool<Sqlite>,
+    tsdb_pool: Pool<Postgres>,
+    collector_actor: ActorRef<DataCollectorActor>,
+    executor_actor: ActorRef<StrategyExecutorActor>,
+    execution_actor: ActorRef<OrderExecutionActor>,
+) -> Router {
     // Create application state
-    let state = AppState::new(db_pool, tsdb_pool);
+    let state = AppState::new(
+        db_pool,
+        tsdb_pool,
+        collector_actor,
+        executor_actor,
+        execution_actor,
+    );
 
     // Configure CORS
     let cors = CorsLayer::new()
