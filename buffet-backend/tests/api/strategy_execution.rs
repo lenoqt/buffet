@@ -26,8 +26,7 @@ async fn test_strategy_executor_persists_signals() {
     // 1. Spawn app (gets us DB pools)
     let app = spawn_app().await;
 
-    // 2. Setup actor with app.db_pool
-    // 2. Setup actor with app.db_pool
+    // 2. Setup actors
     let execution_actor = buffet_backend::actors::OrderExecutionActor::spawn_with_mailbox(
         buffet_backend::actors::OrderExecutionActor::new(app.db_pool.clone()),
         mailbox::bounded(10),
@@ -42,7 +41,7 @@ async fn test_strategy_executor_persists_signals() {
 
     let actor_ref = StrategyExecutorActor::spawn_with_mailbox(executor, mailbox::bounded(10));
 
-    // 3. Send MarketDataUpdate
+    // 3. Send MarketDataUpdate (fire-and-forget)
     let candle = buffet_backend::models::market_data::OHLCV {
         timestamp: chrono::Utc::now(),
         open: 100.0,
@@ -52,16 +51,17 @@ async fn test_strategy_executor_persists_signals() {
         volume: 100.0,
     };
 
-    let signals = actor_ref
-        .ask(MarketDataUpdate {
+    actor_ref
+        .tell(MarketDataUpdate {
             symbol: "BTC".to_string(),
             data: candle,
         })
+        .send()
         .await
-        .expect("Actor call failed");
+        .expect("Failed to send MarketDataUpdate");
 
-    // 4. Verify signal returned
-    assert_eq!(signals.len(), 1);
+    // 4. Wait for async processing
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // 5. Verify signal persisted in DB
     let saved_signals = sqlx::query!(

@@ -60,21 +60,21 @@ impl Message<CollectData> for DataCollectorActor {
             .await
             .map_err(|e| ActorError::Internal(e.to_string()))?;
 
-        // Send to strategy executor
+        // Send to strategy executor (fire-and-forget)
         for point in mock_data {
-            let signals = self
+            let _ = self
                 .strategy_ref
-                .ask(MarketDataUpdate {
+                .tell(MarketDataUpdate {
                     symbol: msg.symbol.clone(),
                     data: point,
                 })
-                .await
-                .map_err(|e| ActorError::Internal(e.to_string()))?;
-
-            if !signals.is_empty() {
-                info!("Generated {} signals for {}", signals.len(), msg.symbol);
-            }
+                .send()
+                .await;
         }
+        info!(
+            "Forwarded {} data points to strategy executor for {}",
+            1, msg.symbol
+        );
 
         Ok(())
     }

@@ -115,6 +115,15 @@ impl Order {
         Self::find_by_id(&id, pool).await
     }
 
+    pub async fn find_all(pool: &Pool<Sqlite>) -> Result<Vec<Order>> {
+        let orders = sqlx::query_as::<_, Order>("SELECT * FROM orders ORDER BY created_at DESC")
+            .fetch_all(pool)
+            .await
+            .map_err(AppError::Database)?;
+
+        Ok(orders)
+    }
+
     pub async fn find_by_id(id: &str, pool: &Pool<Sqlite>) -> Result<Order> {
         let order = sqlx::query_as::<_, Order>("SELECT * FROM orders WHERE id = ?")
             .bind(id)

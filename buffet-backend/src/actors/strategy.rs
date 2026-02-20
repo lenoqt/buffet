@@ -1,4 +1,4 @@
-use crate::actors::messages::{ActorResult, MarketDataUpdate, Signal, SignalType};
+use crate::actors::messages::{MarketDataUpdate, SignalType};
 use crate::models::market_data::OHLCV;
 use kameo::Actor;
 use kameo::message::{Context, Message};
@@ -62,7 +62,7 @@ use crate::models::signal::Signal as SignalModel;
 use sqlx::{Pool, Sqlite};
 
 use crate::actors::OrderExecutionActor;
-use crate::actors::messages::{OrderRequest, OrderUpdate};
+use crate::actors::messages::OrderRequest;
 use crate::models::order::OrderSide;
 use kameo::actor::ActorRef;
 
@@ -89,22 +89,19 @@ impl StrategyExecutorActor {
 }
 
 impl Message<MarketDataUpdate> for StrategyExecutorActor {
-    type Reply = ActorResult<Vec<Signal>>;
+    type Reply = ();
 
     async fn handle(
         &mut self,
         msg: MarketDataUpdate,
         _ctx: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        let mut signals = Vec::new();
-
-        // In a real implementation, we would map symbols to strategies
-        // For now, update all strategies with the data
+        // Process all strategies with the new data
         for (id, strategy) in &mut self.active_strategies {
             if let Some(signal_type) = strategy.update(&msg.data) {
                 let timestamp = chrono::Utc::now();
 
-                // Persist asynchronously
+                // Persist signal to DB
                 let created_signal = match SignalModel::create(
                     id,
                     &msg.symbol,
@@ -122,7 +119,7 @@ impl Message<MarketDataUpdate> for StrategyExecutorActor {
                     }
                 };
 
-                // Send Order Request if signal persisted successfully
+                // Forward order request if signal persisted and is actionable
                 if let Some(signal_record) = created_signal {
                     let side = match signal_type {
                         SignalType::Buy => Some(OrderSide::Buy),
@@ -144,17 +141,7 @@ impl Message<MarketDataUpdate> for StrategyExecutorActor {
                             .await;
                     }
                 }
-
-                signals.push(Signal {
-                    strategy_id: id.clone(),
-                    symbol: msg.symbol.clone(),
-                    signal_type,
-                    timestamp,
-                    metadata: None,
-                });
             }
         }
-
-        Ok(signals)
     }
 }

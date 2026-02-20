@@ -2,7 +2,6 @@ use crate::helpers::spawn_app;
 use buffet_backend::actors::messages::{MarketDataUpdate, SignalType};
 use buffet_backend::actors::strategy::StrategyLogic;
 use buffet_backend::actors::{OrderExecutionActor, StrategyExecutorActor};
-use buffet_backend::models::order::OrderStatus;
 use kameo::actor::Spawn;
 use kameo::mailbox;
 
@@ -43,7 +42,7 @@ async fn test_order_creation_from_signal() {
     let strategy_actor_ref =
         StrategyExecutorActor::spawn_with_mailbox(executor, mailbox::bounded(10));
 
-    // 4. Send MarketDataUpdate to trigger signal and order
+    // 4. Send MarketDataUpdate (fire-and-forget)
     let candle = buffet_backend::models::market_data::OHLCV {
         timestamp: chrono::Utc::now(),
         open: 100.0,
@@ -53,18 +52,31 @@ async fn test_order_creation_from_signal() {
         volume: 100.0,
     };
 
-    let _signals = strategy_actor_ref
-        .ask(MarketDataUpdate {
+    strategy_actor_ref
+        .tell(MarketDataUpdate {
             symbol: "ETH".to_string(),
             data: candle,
         })
+        .send()
         .await
-        .expect("Actor call failed");
+        .expect("Failed to send MarketDataUpdate");
 
-    // 5. Verify Order Created in DB
-    // Give some time for async execution (mailbox processing)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    // 5. Wait for async processing (signal → order → fill)
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
+    // 6. Verify signal persisted
+    let saved_signals = sqlx::query!(
+        "SELECT * FROM signals WHERE strategy_id = ?",
+        "mock_order_strategy"
+    )
+    .fetch_all(&app.db_pool)
+    .await
+    .expect("Failed to fetch signals");
+
+    assert_eq!(saved_signals.len(), 1);
+    assert_eq!(saved_signals[0].signal_type, "buy");
+
+    // 7. Verify order created and filled
     let orders = sqlx::query!("SELECT * FROM orders WHERE symbol = ?", "ETH")
         .fetch_all(&app.db_pool)
         .await

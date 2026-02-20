@@ -8,6 +8,8 @@ use tower_http::{
 use crate::state::AppState;
 
 mod health;
+mod order;
+mod position;
 mod strategy;
 
 use crate::actors::{DataCollectorActor, OrderExecutionActor, StrategyExecutorActor};
@@ -50,6 +52,8 @@ pub fn create_test_router(state: AppState) -> Router {
 fn create_router_with_state(state: AppState) -> Router {
     Router::new()
         .merge(strategy::create_routes())
+        .merge(order::create_routes())
+        .merge(position::create_routes())
         .merge(health::create_routes())
         .with_state(state)
 }
