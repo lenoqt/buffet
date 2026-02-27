@@ -39,6 +39,7 @@ polars = { version = "0.36", features = ["lazy", "temporal"] }
 
 # Market data APIs
 reqwest = { version = "0.12", features = ["json"] }
+yahoo_finance_api = "2.3.1"
 
 # Technical analysis
 ta = "0.5"
