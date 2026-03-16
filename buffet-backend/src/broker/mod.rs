@@ -1,3 +1,6 @@
+pub mod backtest_broker;
+pub use backtest_broker::BacktestBroker;
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
@@ -14,6 +17,8 @@ pub struct FillResult {
     pub filled: bool,
     /// Optional rejection reason
     pub rejection_reason: Option<String>,
+    /// Commission cost deducted from the fill (if applicable)
+    pub commission: Option<f64>,
 }
 
 /// Trait for broker implementations.
@@ -127,6 +132,7 @@ impl Broker for PaperBroker {
             fill_quantity: quantity,
             filled: true,
             rejection_reason: None,
+            commission: None,
         })
     }
 
@@ -153,6 +159,7 @@ impl Broker for PaperBroker {
             fill_quantity: quantity,
             filled: true,
             rejection_reason: None,
+            commission: None,
         })
     }
 

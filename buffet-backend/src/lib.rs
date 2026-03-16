@@ -1,4 +1,5 @@
 pub mod actors;
+pub mod providers;
 pub mod broker;
 pub mod config;
 pub mod db;

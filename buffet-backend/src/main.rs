@@ -1,4 +1,5 @@
 use buffet_backend::{
+    actors::messages::LoadStrategies,
     config, db, routes,
     telemetry::{get_subscriber, init_subscriber},
 };
@@ -22,6 +23,7 @@ async fn main() -> anyhow::Result<()> {
     // Set up database connections
     let db_pool = db::setup_database(&config.database_url).await?;
     let tsdb_pool = db::setup_tsdb(&config.tsdb_url).await?;
+    db::setup_tsdb_tables(&tsdb_pool).await?;
 
     // Initialize actor system
     info!("Initializing actor system");
@@ -40,6 +42,10 @@ async fn main() -> anyhow::Result<()> {
         ),
         mailbox::bounded(config.actor.mailbox_size),
     );
+    // Load all active strategies from the database into the executor
+    let loaded = strategy_actor.ask(LoadStrategies).await;
+    info!("Strategy loading result: {:?}", loaded);
+
     let collector_actor = buffet_backend::actors::DataCollectorActor::spawn_with_mailbox(
         buffet_backend::actors::DataCollectorActor::new(
             storage_actor.clone(),

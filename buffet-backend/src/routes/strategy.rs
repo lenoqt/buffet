@@ -11,4 +11,6 @@ pub fn create_routes() -> Router<AppState> {
         .route("/api/strategies/{id}", get(strategy::get_strategy))
         .route("/api/strategies/{id}", put(strategy::update_strategy))
         .route("/api/strategies/{id}", delete(strategy::delete_strategy))
+        .route("/api/strategies/{id}/activate", put(strategy::activate_strategy))
+        .route("/api/strategies/{id}/deactivate", put(strategy::deactivate_strategy))
 }

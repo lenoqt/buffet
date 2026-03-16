@@ -18,6 +18,8 @@ async fn test_backtest_execution_flow() {
             "fast_period": 2,
             "slow_period": 4
         }),
+        status: None,
+        symbols: None,
     };
 
     let response = app
@@ -64,6 +66,8 @@ async fn test_backtest_execution_flow() {
         start_time: now - Duration::hours(1),
         end_time: now + Duration::hours(1),
         initial_balance: 1000.0,
+        commission_rate: None,
+        slippage_bps: None,
     };
 
     let response = app

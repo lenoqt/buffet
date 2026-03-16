@@ -39,6 +39,13 @@ pub struct Backtest {
     pub status: String,
     pub error_message: Option<String>,
     pub created_at: DateTime<Utc>,
+    // T11 additions
+    pub commission_rate: f64,
+    pub slippage_bps: f64,
+    pub run_config: Option<String>,
+    pub trade_count: Option<i64>,
+    pub win_rate: Option<f64>,
+    pub profit_factor: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -63,6 +70,9 @@ pub struct CreateBacktestDto {
     pub start_time: DateTime<Utc>,
     pub end_time: DateTime<Utc>,
     pub initial_balance: f64,
+    // T11 additions
+    pub commission_rate: Option<f64>,
+    pub slippage_bps: Option<f64>,
 }
 
 impl Backtest {
@@ -70,11 +80,13 @@ impl Backtest {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now();
         let status = BacktestStatus::Pending.to_string();
+        let commission_rate = dto.commission_rate.unwrap_or(0.001);
+        let slippage_bps = dto.slippage_bps.unwrap_or(10.0);
 
         sqlx::query!(
             r#"
-            INSERT INTO backtests (id, strategy_id, symbol, start_time, end_time, initial_balance, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO backtests (id, strategy_id, symbol, start_time, end_time, initial_balance, status, created_at, commission_rate, slippage_bps)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
             id,
             dto.strategy_id,
@@ -83,7 +95,9 @@ impl Backtest {
             dto.end_time,
             dto.initial_balance,
             status,
-            now
+            now,
+            commission_rate,
+            slippage_bps
         )
         .execute(pool)
         .await
@@ -139,18 +153,34 @@ impl Backtest {
         total_return: f64,
         sharpe_ratio: f64,
         max_drawdown: f64,
+        run_config: Option<String>,
+        trade_count: i64,
+        win_rate: f64,
+        profit_factor: f64,
         pool: &Pool<Sqlite>,
     ) -> Result<()> {
         sqlx::query!(
             r#"
-            UPDATE backtests 
-            SET final_balance = ?, total_return = ?, sharpe_ratio = ?, max_drawdown = ?, status = 'completed'
+            UPDATE backtests
+            SET final_balance = ?,
+                total_return = ?,
+                sharpe_ratio = ?,
+                max_drawdown = ?,
+                run_config = ?,
+                trade_count = ?,
+                win_rate = ?,
+                profit_factor = ?,
+                status = 'completed'
             WHERE id = ?
             "#,
             final_balance,
             total_return,
             sharpe_ratio,
             max_drawdown,
+            run_config,
+            trade_count,
+            win_rate,
+            profit_factor,
             id
         )
         .execute(pool)
@@ -232,7 +262,7 @@ impl BacktestTrade {
     ) -> Result<()> {
         sqlx::query!(
             r#"
-            UPDATE backtest_trades 
+            UPDATE backtest_trades
             SET exit_price = ?, exit_time = ?, pnl = ?, percentage_return = ?
             WHERE id = ?
             "#,

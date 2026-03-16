@@ -1,0 +1,1 @@
+ALTER TABLE strategies ADD COLUMN symbols TEXT NOT NULL DEFAULT '[]';

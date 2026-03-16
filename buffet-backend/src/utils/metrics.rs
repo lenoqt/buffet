@@ -47,6 +47,43 @@ pub fn calculate_max_drawdown(equity_curve: &[f64]) -> f64 {
     max_drawdown
 }
 
+/// Calculate Win Rate from a slice of per-trade PnL values.
+///
+/// win_rate = number of trades with pnl > 0 / total trades
+pub fn calculate_win_rate(trades_pnl: &[f64]) -> f64 {
+    if trades_pnl.is_empty() {
+        return 0.0;
+    }
+    let wins = trades_pnl.iter().filter(|&&pnl| pnl > 0.0).count();
+    wins as f64 / trades_pnl.len() as f64
+}
+
+/// Calculate Profit Factor from a slice of per-trade PnL values.
+///
+/// profit_factor = sum of winning PnLs / abs(sum of losing PnLs)
+/// Returns f64::INFINITY if there are winning trades but no losing trades.
+/// Returns 0.0 if there are no trades.
+pub fn calculate_profit_factor(trades_pnl: &[f64]) -> f64 {
+    if trades_pnl.is_empty() {
+        return 0.0;
+    }
+    let gross_profit: f64 = trades_pnl.iter().filter(|&&pnl| pnl > 0.0).sum();
+    let gross_loss: f64 = trades_pnl
+        .iter()
+        .filter(|&&pnl| pnl < 0.0)
+        .sum::<f64>()
+        .abs();
+    if gross_loss == 0.0 {
+        if gross_profit > 0.0 {
+            f64::INFINITY
+        } else {
+            0.0
+        }
+    } else {
+        gross_profit / gross_loss
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -58,5 +95,36 @@ mod tests {
         // Drawdowns: 0, 0, (110-90)/110=0.18, 0, (120-80)/120=0.33, (120-100)/120=0.16
         let mdd = calculate_max_drawdown(&equity);
         assert!((mdd - 0.3333333333).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_win_rate() {
+        let pnls = vec![100.0, -50.0, 200.0, -30.0, 50.0];
+        let wr = calculate_win_rate(&pnls);
+        assert!((wr - 0.6).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_win_rate_empty() {
+        assert_eq!(calculate_win_rate(&[]), 0.0);
+    }
+
+    #[test]
+    fn test_profit_factor() {
+        let pnls = vec![100.0, -50.0, 200.0, -30.0];
+        // gross_profit = 300, gross_loss = 80
+        let pf = calculate_profit_factor(&pnls);
+        assert!((pf - 3.75).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_profit_factor_no_losses() {
+        let pnls = vec![100.0, 200.0];
+        assert_eq!(calculate_profit_factor(&pnls), f64::INFINITY);
+    }
+
+    #[test]
+    fn test_profit_factor_empty() {
+        assert_eq!(calculate_profit_factor(&[]), 0.0);
     }
 }

@@ -4,8 +4,12 @@ use yew_router::prelude::*;
 pub enum Route {
     #[at("/")]
     Dashboard,
+    #[at("/strategies/:id")]
+    StrategyDetail { id: String },
     #[at("/strategies")]
     Strategies,
+    #[at("/backtests/:id")]
+    BacktestDetail { id: String },
     #[at("/backtests")]
     Backtests,
     #[at("/settings")]

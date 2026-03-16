@@ -13,7 +13,7 @@ wasm-bindgen-futures = "0.4"
 lucide-yew = "0.1.0" # For icons
 stylist = { version = "0.13.0", features = ["yew_integration"] } # For CSS-in-Rust
 chrono = { version = "0.4", features = ["serde"] }
-web-sys = { version = "0.3.69", features = ["HtmlInputElement", "HtmlTextAreaElement"] }
+web-sys = { version = "0.3.69", features = ["HtmlInputElement", "HtmlSelectElement", "HtmlTextAreaElement"] }
 
 [profile.release]
 # Optimize for small size

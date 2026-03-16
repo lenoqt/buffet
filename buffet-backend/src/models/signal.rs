@@ -68,4 +68,16 @@ impl Signal {
 
         Ok(signals)
     }
+
+    pub async fn find_by_strategy_id(strategy_id: &str, pool: &Pool<Sqlite>) -> Result<Vec<Signal>> {
+        let signals = sqlx::query_as::<_, Signal>(
+            "SELECT * FROM signals WHERE strategy_id = ? ORDER BY created_at DESC",
+        )
+        .bind(strategy_id)
+        .fetch_all(pool)
+        .await
+        .map_err(AppError::Database)?;
+
+        Ok(signals)
+    }
 }

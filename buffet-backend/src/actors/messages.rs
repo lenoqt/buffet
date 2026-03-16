@@ -121,3 +121,30 @@ pub struct MarketDataUpdate {
 pub struct RunBacktest {
     pub backtest_id: String,
 }
+
+/// Request to collect historical OHLCV data for a specific date range
+#[derive(Debug, Clone)]
+pub struct CollectHistorical {
+    pub symbol: String,
+    pub asset_type: String,
+    pub start: chrono::DateTime<chrono::Utc>,
+    pub end: chrono::DateTime<chrono::Utc>,
+}
+
+/// Load all active strategies from the database into the executor
+#[derive(Debug, Clone)]
+pub struct LoadStrategies;
+
+/// Register a single strategy at runtime
+#[derive(Debug, Clone)]
+pub struct RegisterStrategy {
+    pub strategy_id: String,
+    pub strategy_type: String,
+    pub parameters: String, // JSON string
+}
+
+/// Unregister (deactivate) a strategy at runtime
+#[derive(Debug, Clone)]
+pub struct UnregisterStrategy {
+    pub strategy_id: String,
+}

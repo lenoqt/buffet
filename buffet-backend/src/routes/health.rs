@@ -1,15 +1,6 @@
-use axum::{
-    routing::get,
-    Router,
-};
-
-use crate::state::AppState;
-
-pub async fn health_check() -> &'static str {
-    "OK"
-}
+use crate::{handlers::health, state::AppState};
+use axum::{Router, routing::get};
 
 pub fn create_routes() -> Router<AppState> {
-    Router::new()
-        .route("/api/health", get(health_check))
+    Router::new().route("/api/health", get(health::health_check))
 }

@@ -10,9 +10,11 @@ use crate::state::AppState;
 use kameo::actor::ActorRef;
 
 mod backtest;
+mod collect;
 mod health;
 mod order;
 mod position;
+mod signal;
 mod strategy;
 
 pub fn create_router(
@@ -49,6 +51,8 @@ fn create_router_with_state(state: AppState) -> Router {
         .merge(order::create_routes())
         .merge(position::create_routes())
         .merge(backtest::create_routes())
+        .merge(signal::create_routes())
+        .merge(collect::create_routes())
         .merge(health::create_routes())
         .with_state(state)
 }
